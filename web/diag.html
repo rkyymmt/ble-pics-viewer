@@ -81,6 +81,8 @@ function dumpDataMap(mapLike) {
   return out;
 }
 
+const TEST_COMPANY_IDS = [0x01CE, 0x004C, 0x038F, 0x0006, 0x0075, 0xFFFF];
+
 function dumpEvent(ev) {
   const info = {
     name: ev.name ?? ev.device?.name ?? null,
@@ -89,6 +91,21 @@ function dumpEvent(ev) {
     manufacturerData: dumpDataMap(ev.manufacturerData),
     serviceData: dumpDataMap(ev.serviceData),
   };
+  const md = ev.manufacturerData;
+  if (md) {
+    info.mdType = Object.prototype.toString.call(md);
+    const got = {};
+    for (const id of TEST_COMPANY_IDS) {
+      try {
+        const v = (typeof md.get === 'function') ? md.get(id) : md[id];
+        if (v != null) got['0x' + id.toString(16)] = hexOf(v);
+      } catch (_) {}
+    }
+    if (Object.keys(got).length) info.mdGet = got;
+    try {
+      if (typeof md.keys === 'function') info.mdKeys = [...md.keys()].map(String);
+    } catch (_) {}
+  }
   return JSON.stringify(info);
 }
 
@@ -160,7 +177,17 @@ document.getElementById('run').addEventListener('click', async () => {
 document.getElementById('dev').addEventListener('click', async () => {
   log('--- requestDevice方式を試行 ---');
   try {
-    const device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true });
+    let device;
+    try {
+      device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalManufacturerData: TEST_COMPANY_IDS,
+      });
+      log('optionalManufacturerData付きでデバイス取得に成功');
+    } catch (e1) {
+      log('optionalManufacturerData付きは失敗:', describe(e1), '→ 素のacceptAllDevicesで再試行');
+      device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true });
+    }
     log('選択されたデバイス:', describe({ name: device.name, id: device.id }));
     log('deviceのプロパティ/メソッド一覧:', listMethods(device).join(', '));
     log('typeof device.watchAdvertisements:', typeof device.watchAdvertisements);
