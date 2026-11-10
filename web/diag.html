@@ -56,6 +56,42 @@ function describe(value) {
   return JSON.stringify(out);
 }
 
+function hexOf(value) {
+  try {
+    let bytes = null;
+    if (value instanceof DataView) bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    else if (value instanceof ArrayBuffer) bytes = new Uint8Array(value);
+    else if (Array.isArray(value)) bytes = Uint8Array.from(value);
+    else if (value && typeof value.length === 'number') bytes = Uint8Array.from(value);
+    if (!bytes) return describe(value);
+    return [...bytes].map(b => b.toString(16).padStart(2, '0')).join(' ');
+  } catch (_) { return '(hex化失敗)'; }
+}
+
+function dumpDataMap(mapLike) {
+  const out = {};
+  if (!mapLike) return out;
+  try {
+    if (typeof mapLike.forEach === 'function') {
+      mapLike.forEach((v, k) => { out[String(k)] = hexOf(v); });
+      return out;
+    }
+    for (const k of Object.keys(mapLike)) out[k] = hexOf(mapLike[k]);
+  } catch (e) { out._error = String(e); }
+  return out;
+}
+
+function dumpEvent(ev) {
+  const info = {
+    name: ev.name ?? ev.device?.name ?? null,
+    rssi: (typeof ev.rssi === 'number') ? ev.rssi : null,
+    uuids: ev.uuids ?? ev.serviceUuids ?? null,
+    manufacturerData: dumpDataMap(ev.manufacturerData),
+    serviceData: dumpDataMap(ev.serviceData),
+  };
+  return JSON.stringify(info);
+}
+
 function listMethods(obj) {
   const names = new Set();
   let cur = obj;
@@ -130,12 +166,25 @@ document.getElementById('dev').addEventListener('click', async () => {
     log('typeof device.watchAdvertisements:', typeof device.watchAdvertisements);
     if (typeof device.watchAdvertisements === 'function') {
       let cnt = 0;
-      device.addEventListener('advertisementreceived', () => { cnt++; });
+      device.addEventListener('advertisementreceived', (ev) => {
+        cnt++;
+        if (cnt <= 3) log(`イベント${cnt}:`, dumpEvent(ev));
+      });
       await device.watchAdvertisements();
       log('device.watchAdvertisements() 成功。8秒間イベントを数えます…');
       await new Promise(r => setTimeout(r, 8000));
       log('8秒間の受信件数（このデバイス分）:', cnt);
       try { device.unwatchAdvertisements?.(); } catch (_) {}
+      log('--- {signal}付き呼び出しを試行 ---');
+      try {
+        const ac = new AbortController();
+        await device.watchAdvertisements({ signal: ac.signal });
+        log('{signal}付き: 成功');
+        ac.abort();
+        try { device.unwatchAdvertisements?.(); } catch (_) {}
+      } catch (e) {
+        log('{signal}付き: 失敗:', describe(e));
+      }
     }
   } catch (e) {
     log('requestDevice方式 失敗:', describe(e));
