@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bluefy Bluetooth 診断ページ</title>
+<style>
+  body { font-family: -apple-system, "Hiragino Sans", sans-serif; margin: 16px; line-height: 1.5; }
+  h1 { font-size: 20px; }
+  button { font-size: 16px; padding: 10px 14px; margin: 4px 4px 4px 0; border-radius: 8px; }
+  pre { background: #111; color: #d7ffd7; padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: 12px; min-height: 200px; }
+  .note { color: #555; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Bluefy Bluetooth 診断</h1>
+<p class="note">このページは診断専用です。下の「診断を実行」を押すと、Bluetoothの利用可否と、watchAdvertisements の呼び出し方ごとの結果を表示します。表示されたログをそのまま教えてください（スクリーンショットでも可）。</p>
+<button id="run">診断を実行</button>
+<button id="stop" disabled>監視を停止</button>
+<pre id="log">（未実行）</pre>
+
+<script>
+'use strict';
+const logEl = document.getElementById('log');
+const stopBtn = document.getElementById('stop');
+let logLines = [];
+let abortController = null;
+let eventCount = 0;
+
+function log(...parts) {
+  const line = parts.map(p => (typeof p === 'string' ? p : describe(p))).join(' ');
+  logLines.push(line);
+  logEl.textContent = logLines.join('\n');
+}
+
+function describe(value) {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value !== 'object' && typeof value !== 'function') return String(value);
+  const out = { _type: Object.prototype.toString.call(value) };
+  for (const key of ['name', 'message', 'code', 'number', 'status']) {
+    try { if (value[key] !== undefined) out[key] = String(value[key]); } catch (_) {}
+  }
+  try {
+    const own = {};
+    for (const key of Object.getOwnPropertyNames(value)) {
+      try {
+        const v = value[key];
+        if (typeof v !== 'function') own[key] = (v && typeof v === 'object') ? describe(v) : v;
+      } catch (_) {}
+    }
+    if (Object.keys(own).length) out._own = own;
+  } catch (_) {}
+  try { out._json = JSON.stringify(value); } catch (_) {}
+  return JSON.stringify(out);
+}
+
+function listMethods(obj) {
+  const names = new Set();
+  let cur = obj;
+  for (let depth = 0; cur && depth < 4; depth++) {
+    for (const n of Object.getOwnPropertyNames(cur)) names.add(n);
+    cur = Object.getPrototypeOf(cur);
+  }
+  return [...names].sort();
+}
+
+async function tryWatch(label, makeOptions) {
+  log(`--- watchAdvertisements ${label} を試行 ---`);
+  eventCount = 0;
+  try {
+    const opts = makeOptions ? makeOptions() : undefined;
+    const p = makeOptions ? navigator.bluetooth.watchAdvertisements(opts)
+                           : navigator.bluetooth.watchAdvertisements();
+    log('戻り値の型:', typeof p, p && p.constructor ? p.constructor.name : '');
+    await p;
+    log('=> 成功（Promise解決）。8秒間イベントを数えます…');
+    await new Promise(r => setTimeout(r, 8000));
+    log('8秒間の advertisementreceived 件数:', eventCount);
+    return true;
+  } catch (e) {
+    log('=> 失敗:', describe(e));
+    return false;
+  }
+}
+
+document.getElementById('run').addEventListener('click', async () => {
+  logLines = [];
+  logEl.textContent = '';
+  log('UA:', navigator.userAgent);
+  log('secureContext:', String(window.isSecureContext), 'URL:', location.href);
+  const bt = navigator.bluetooth;
+  log('navigator.bluetooth:', bt ? '存在する' : '存在しない');
+  if (!bt) { log('診断終了: bluetoothオブジェクトがありません'); return; }
+  log('bluetoothのプロパティ/メソッド一覧:', listMethods(bt).join(', '));
+  for (const m of ['watchAdvertisements', 'unwatchAdvertisements', 'requestLEScan', 'requestDevice', 'getAvailability', 'getDevices', 'setScreenDimEnabled']) {
+    log(`typeof bluetooth.${m}:`, typeof bt[m]);
+  }
+  if (typeof bt.getAvailability === 'function') {
+    try { log('getAvailability():', String(await bt.getAvailability())); }
+    catch (e) { log('getAvailability() 失敗:', describe(e)); }
+  }
+  bt.addEventListener('advertisementreceived', () => { eventCount++; });
+
+  abortController = ('AbortController' in window) ? new AbortController() : null;
+  let ok = await tryWatch('（引数なし）', null);
+  if (!ok) ok = await tryWatch('（空オブジェクト {}）', () => ({}));
+  if (!ok && abortController) ok = await tryWatch('（{signal}）', () => ({ signal: abortController.signal }));
+  stopBtn.disabled = !ok;
+  log(ok ? '診断終了: いずれかの方式で監視を開始できました' : '診断終了: 全方式で開始できませんでした');
+});
+
+stopBtn.addEventListener('click', () => {
+  try { abortController?.abort(); } catch (_) {}
+  try { navigator.bluetooth?.unwatchAdvertisements?.(); } catch (_) {}
+  log('停止を呼び出しました');
+  stopBtn.disabled = true;
+});
+</script>
+</body>
+</html>
