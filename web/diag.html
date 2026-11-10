@@ -94,6 +94,10 @@ function dumpEvent(ev) {
   const md = ev.manufacturerData;
   if (md) {
     info.mdType = Object.prototype.toString.call(md);
+    if (md instanceof DataView || md instanceof ArrayBuffer) {
+      info.mdBytes = hexOf(md);
+      info.mdByteLength = (md.byteLength !== undefined) ? md.byteLength : md.length;
+    }
     const got = {};
     for (const id of TEST_COMPANY_IDS) {
       try {
@@ -106,6 +110,15 @@ function dumpEvent(ev) {
       if (typeof md.keys === 'function') info.mdKeys = [...md.keys()].map(String);
     } catch (_) {}
   }
+  const sd = ev.serviceData;
+  if (sd) {
+    info.sdType = Object.prototype.toString.call(sd);
+    if (sd instanceof DataView || sd instanceof ArrayBuffer) {
+      info.sdBytes = hexOf(sd);
+      info.sdByteLength = (sd.byteLength !== undefined) ? sd.byteLength : sd.length;
+    }
+  }
+  try { info.evKeys = Object.keys(ev); } catch (_) {}
   return JSON.stringify(info);
 }
 
