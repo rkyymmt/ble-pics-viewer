@@ -17,6 +17,7 @@
 <p class="note">このページは診断専用です。下の「診断を実行」を押すと、Bluetoothの利用可否と、watchAdvertisements の呼び出し方ごとの結果を表示します。表示されたログをそのまま教えてください（スクリーンショットでも可）。</p>
 <button id="run">診断を実行</button>
 <button id="stop" disabled>監視を停止</button>
+<button id="dev">requestDevice方式を試す</button>
 <pre id="log">（未実行）</pre>
 
 <script>
@@ -100,6 +101,16 @@ document.getElementById('run').addEventListener('click', async () => {
     try { log('getAvailability():', String(await bt.getAvailability())); }
     catch (e) { log('getAvailability() 失敗:', describe(e)); }
   }
+  try {
+    const bleGlobals = Object.getOwnPropertyNames(window).filter(n => /ble|bluetooth/i.test(n));
+    log('BLE関連のグローバル:', bleGlobals.join(', ') || '(なし)');
+    const handlers = window.webkit?.messageHandlers ? Object.keys(window.webkit.messageHandlers) : [];
+    log('webkit.messageHandlers:', handlers.join(', ') || '(なし)');
+    if (typeof bt.getDevices === 'function') {
+      const devs = await bt.getDevices();
+      log('getDevices() 件数:', devs.length);
+    }
+  } catch (e) { log('追加プローブ失敗:', describe(e)); }
   bt.addEventListener('advertisementreceived', () => { eventCount++; });
 
   abortController = ('AbortController' in window) ? new AbortController() : null;
@@ -108,6 +119,27 @@ document.getElementById('run').addEventListener('click', async () => {
   if (!ok && abortController) ok = await tryWatch('（{signal}）', () => ({ signal: abortController.signal }));
   stopBtn.disabled = !ok;
   log(ok ? '診断終了: いずれかの方式で監視を開始できました' : '診断終了: 全方式で開始できませんでした');
+});
+
+document.getElementById('dev').addEventListener('click', async () => {
+  log('--- requestDevice方式を試行 ---');
+  try {
+    const device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true });
+    log('選択されたデバイス:', describe({ name: device.name, id: device.id }));
+    log('deviceのプロパティ/メソッド一覧:', listMethods(device).join(', '));
+    log('typeof device.watchAdvertisements:', typeof device.watchAdvertisements);
+    if (typeof device.watchAdvertisements === 'function') {
+      let cnt = 0;
+      device.addEventListener('advertisementreceived', () => { cnt++; });
+      await device.watchAdvertisements();
+      log('device.watchAdvertisements() 成功。8秒間イベントを数えます…');
+      await new Promise(r => setTimeout(r, 8000));
+      log('8秒間の受信件数（このデバイス分）:', cnt);
+      try { device.unwatchAdvertisements?.(); } catch (_) {}
+    }
+  } catch (e) {
+    log('requestDevice方式 失敗:', describe(e));
+  }
 });
 
 stopBtn.addEventListener('click', () => {
