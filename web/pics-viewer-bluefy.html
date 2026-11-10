@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3f6f4">
+<meta name="description" content="高度化PICSのBLEアドバタイズをiPhoneのBluefyで受信・可視化するWeb Bluetoothモニター。">
+<title>PICS Viewer · Bluefy (iPhone) 版</title>
+<style>
+  :root {
+    --bg: #f3f6f4; --panel: #ffffff; --ink: #1c2b23; --muted: #5c6f65;
+    --line: #d8e2dc; --accent: #0b6e4f; --accent-ink: #ffffff;
+    --red: #d64545; --green: #1faa59; --amber: #e8a13a; --gray-lamp: #c3cec8;
+    --error-bg: #fdeeee; --error-ink: #8c2b2b; --demo-bg: #fff6dd; --demo-ink: #6b5510;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101613; --panel: #1a221e; --ink: #e6efe9; --muted: #9db3a7;
+      --line: #2c3a33; --accent: #2ea36f; --error-bg: #3a1f1f; --error-ink: #f0b4b4;
+      --demo-bg: #38300f; --demo-ink: #ecd27a; --gray-lamp: #46524b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    -webkit-text-size-adjust: 100%; }
+  .shell { max-width: 960px; margin: 0 auto; padding: 16px 14px 40px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .brand { display: flex; gap: 10px; align-items: flex-start; }
+  .brand-mark { font-size: 22px; color: var(--accent); }
+  .eyebrow { margin: 0; font-size: 10px; letter-spacing: .14em; color: var(--muted); font-weight: 600; }
+  h1 { margin: 2px 0 0; font-size: 22px; }
+  h1 span { font-size: 13px; color: var(--accent); font-weight: 600; }
+  h2 { margin: 2px 0 0; font-size: 17px; }
+  h3 { font-size: 13px; margin: 14px 0 6px; }
+  h3 span { color: var(--muted); font-weight: 400; font-size: 11px; }
+  .badge { flex: none; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--line); }
+  .badge[data-mode="scanning"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .badge[data-mode="demo"] { background: var(--amber); color: #231a00; border-color: var(--amber); }
+  .badge[data-mode="requesting"] { background: var(--demo-bg); color: var(--demo-ink); }
+  .notice { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 10px 12px; font-size: 13px; line-height: 1.6; margin: 12px 0; }
+  .notice ul { margin: 0; padding-left: 18px; }
+  .notice.error { background: var(--error-bg); color: var(--error-ink); white-space: pre-wrap; }
+  .notice.demo-notice { background: var(--demo-bg); color: var(--demo-ink); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; margin: 14px 0; }
+  .intro p:last-child { font-size: 14px; line-height: 1.7; margin: 6px 0 0; }
+  label.reception-method { display: block; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  select { display: block; width: 100%; margin-top: 4px; font-size: 16px; padding: 9px;
+    border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  button { font-size: 15px; padding: 10px 16px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  button:disabled { opacity: .45; cursor: default; }
+  .debug-toggle { display: block; margin-top: 12px; font-size: 14px; }
+  .debug-toggle input { width: 18px; height: 18px; vertical-align: -3px; }
+  #status { font-size: 13px; color: var(--muted); margin: 10px 0 0; line-height: 1.6; }
+  .section-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .small-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+  .intersection-control label { font-size: 12px; color: var(--muted); }
+  .intersection-control select { min-width: 170px; }
+  .intersection-meta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 14px; }
+  .intersection-meta span { color: var(--muted); }
+  .freshness { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  .freshness.stale { color: var(--error-ink); font-weight: 700; }
+  .signals { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+  .signals.is-stale { opacity: .55; }
+  .signal { border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+  .signal-heading { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+  .signal-body { display: flex; gap: 10px; align-items: center; }
+  .lamp { width: 34px; height: 34px; border-radius: 50%; background: var(--gray-lamp); flex: none;
+    box-shadow: inset 0 -4px 8px rgba(0,0,0,.18); }
+  .signal[data-state="Red"] .lamp { background: var(--red); }
+  .signal[data-state="Green"] .lamp { background: var(--green); }
+  .signal[data-state="BlinkGreen"] .lamp { background: var(--green); animation: blink 1s steps(2, start) infinite; }
+  @keyframes blink { to { visibility: hidden; } }
+  .signal-state { font-size: 17px; font-weight: 700; }
+  .remaining { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .caption { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .details-grid { display: grid; grid-template-columns: 1fr; gap: 0; }
+  @media (min-width: 720px) { .details-grid { grid-template-columns: 1fr 1fr; gap: 14px; } .details-grid .panel { margin: 0 0 14px; } }
+  .packet-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin: 10px 0 0; }
+  .packet-meta dt { font-size: 11px; color: var(--muted); }
+  .packet-meta dd { margin: 2px 0 0; font-size: 14px; font-variant-numeric: tabular-nums; word-break: break-all; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+    font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+  .table-scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-size: 11px; }
+  td.empty { color: var(--muted); text-align: center; }
+  td small { display: block; color: var(--muted); font-size: 10px; }
+  .state-label[data-state="Red"] { color: var(--red); font-weight: 700; }
+  .state-label[data-state="Green"], .state-label[data-state="BlinkGreen"] { color: var(--green); font-weight: 700; }
+  details.panel summary { cursor: pointer; font-weight: 700; }
+  details pre { max-height: 300px; overflow: auto; }
+  .safety-note { font-size: 12px; color: var(--muted); text-align: center; margin-top: 18px; }
+  footer { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 8px; }
+  code { font-size: 12px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">↗</span>
+      <div><p class="eyebrow">PEDESTRIAN INFORMATION & COMMUNICATION SYSTEM</p>
+      <h1>PICS Viewer <span>Bluefy 版</span></h1></div>
+    </div>
+    <span id="mode" class="badge" role="status" data-mode="idle">停止中</span>
+  </header>
+
+  <aside class="notice requirements" aria-label="ご利用前の設定">
+    <ul>
+      <li>このページは <strong>iPhone の Bluefy（Web BLE Browser）</strong> で開いてください。Safari / Chrome（iOS版）では Bluetooth を使えません。</li>
+      <li>Bluefy の設定で <strong>watchAdvertisements を許可</strong> してください（アプリ設定内の開発者向け機能）。iPhone の Bluetooth はオンにしてください。</li>
+      <li>このページは HTTPS で配信されている必要があります。ファイルのまま開いた場合はデモのみ利用できます。</li>
+      <li>原典: <a href="https://github.com/yumu19/ble-pics-viewer" target="_blank" rel="noreferrer">yumu19/ble-pics-viewer</a>（MIT License）の Web Bluetooth 版を Bluefy 向けに移植したものです。</li>
+    </ul>
+  </aside>
+
+  <main>
+    <section class="intro">
+      <p class="eyebrow">高度化PICS アドバタイズモニター</p>
+      <p>高度化PICSは、歩行者向けに信号情報をBluetoothで配信するシステムです。このページでは、近くの信号状態をリアルタイムに表示します。高度化PICSについて詳しくは、<a href="https://github.com/yumu19/ble-pics-viewer" target="_blank" rel="noreferrer">リポジトリの説明</a>をご覧ください。</p>
+    </section>
+
+    <section class="panel controls" aria-label="受信操作">
+      <label class="reception-method" for="reception-method">受信方式
+        <select id="reception-method">
+          <option value="bluefy">周囲をまとめて監視（Bluefy）</option>
+          <option value="scan">周囲をまとめてスキャン（requestLEScan）</option>
+          <option value="watch">デバイスを選んで広告を監視</option>
+        </select>
+      </label>
+      <label id="watch-target-control" class="reception-method" for="watch-target" hidden>対象
+        <select id="watch-target">
+          <option value="pics">PICS候補（0x01CE）</option>
+          <option value="all">すべてのデバイス（受信確認用）</option>
+        </select>
+      </label>
+      <div class="actions">
+        <button id="start" class="primary" type="button">監視開始</button>
+        <button id="demo" type="button">デモを試す</button>
+        <button id="stop" type="button" disabled>停止</button>
+      </div>
+      <label class="debug-toggle"><input id="debug-enabled" type="checkbox"> デバッグモード</label>
+      <p id="status" role="status">監視開始、またはデモを選んでください。</p>
+    </section>
+
+    <aside id="compatibility" class="notice" aria-label="動作環境"></aside>
+    <p id="watch-notice" class="notice" hidden></p>
+    <noscript><p class="notice">このアプリを使用するにはJavaScriptを有効にしてください。</p></noscript>
+    <p id="error" class="notice error" role="alert" hidden></p>
+    <p id="demo-notice" class="notice demo-notice" hidden>デモデータ · 以下は架空のデータです。実際の信号状態ではありません。</p>
+
+    <section id="debug-panel" class="panel debug-panel" aria-labelledby="debug-title" hidden>
+      <div class="section-heading"><div><p class="eyebrow">BLUETOOTH DIAGNOSTICS</p><h2 id="debug-title">BLEスキャンの受信確認</h2></div><button id="debug-clear" type="button">ログを消去</button></div>
+      <p class="caption">PICS以外も含め、ブラウザが通知したBLEアドバタイズを表示します。表示は約1秒ごとに更新します。デモの生成データは含みません。</p>
+      <p id="debug-status" class="notice" role="status">実際のアドバタイズはまだ受信していません。</p>
+      <dl class="packet-meta debug-stats">
+        <div><dt>受信イベント数</dt><dd id="debug-count">0</dd></div>
+        <div><dt>デバイス（保持最大100件）</dt><dd id="debug-devices">0</dd></div>
+        <div><dt>メーカーID 0x01CE を含む</dt><dd id="debug-pics-count">0</dd></div>
+        <div><dt>最終受信</dt><dd id="debug-last">—</dd></div>
+      </dl>
+      <h3>検出デバイス <span>最近受信した順・最大100件</span></h3>
+      <div class="table-scroll"><table><thead><tr><th scope="col">最終受信</th><th scope="col">名称 / デバイスID</th><th scope="col">RSSI</th><th scope="col">メーカーID</th><th scope="col">受信数</th></tr></thead><tbody id="debug-device-list"></tbody></table></div>
+      <details><summary>アドバタイズの詳細ログ（最新20件）</summary><pre id="debug-log">アドバタイズ未受信</pre></details>
+      <p class="caption">デバイスIDはブラウザが提供する識別子で、MACアドレスではありません。表示できるのはAPIから渡された項目だけです。ログはページ内のメモリーだけに保持し、デバッグをオフにすると消去します。</p>
+    </section>
+
+    <section class="panel monitor" aria-labelledby="monitor-title">
+      <div class="section-heading">
+        <div><p class="eyebrow">SIGNAL MONITOR</p><h2 id="monitor-title">歩行者信号</h2></div>
+        <div class="intersection-control"><label for="intersection">交差点</label><select id="intersection" disabled><option value="">受信待ち</option></select></div>
+      </div>
+      <div class="intersection-meta"><strong id="intersection-name">交差点の情報を待っています</strong><span id="coordinates">位置情報 未受信</span></div>
+      <p id="freshness" class="freshness">Type 2（信号状態）の受信待ち</p>
+      <div id="signals" class="signals"></div>
+      <p class="caption">信号1・2は既存Python版の東西・南北表示に対応します。実際の方角は設置場所に依存します。残り値は受信値の解析結果で、秒数への換算やカウントダウンは行いません。</p>
+    </section>
+
+    <div class="details-grid">
+      <section class="panel packet" aria-labelledby="packet-title">
+        <div class="section-heading"><div><p class="eyebrow">ADVERTISEMENT</p><h2 id="packet-title">受信パケット</h2></div><span class="small-tag">0x01CE</span></div>
+        <dl class="packet-meta">
+          <div><dt>受信時刻</dt><dd id="received-at">—</dd></div>
+          <div><dt>メッセージ</dt><dd id="message-type">—</dd></div>
+          <div><dt>RSSI</dt><dd id="rssi">—</dd></div>
+          <div><dt>受信数（全交差点）</dt><dd id="packet-count">0</dd></div>
+        </dl>
+        <h3>RAW DATA <span>メーカーIDを除く</span></h3>
+        <pre id="raw">パケット未受信</pre>
+        <details><summary>最新パケットの解析結果（JSON）</summary><pre id="parsed">{}</pre></details>
+        <p id="invalid-count" class="caption">不正パケット: 0</p>
+      </section>
+
+      <section class="panel history" aria-labelledby="history-title">
+        <div class="section-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2 id="history-title">信号履歴</h2></div><span class="small-tag">30秒 / 最大5件</span></div>
+        <p class="caption">選択中の交差点のType 2受信履歴</p>
+        <div class="table-scroll"><table><thead><tr><th scope="col">受信時刻</th><th scope="col">信号1</th><th scope="col">信号2</th><th scope="col">残り値 1 / 2</th></tr></thead><tbody id="history"><tr><td colspan="4" class="empty">信号の受信履歴はありません</td></tr></tbody></table></div>
+      </section>
+    </div>
+
+    <details class="panel help">
+      <summary>動作環境・使い方（Bluefy版）</summary>
+      <ol>
+        <li>このページを HTTPS の URL で、iPhone の <strong>Bluefy</strong> アプリで開きます。</li>
+        <li>Bluefy の設定で watchAdvertisements（周囲のアドバタイズ監視）を有効にし、Bluetooth の許可を与えてください。</li>
+        <li>「監視開始」から受信を開始してください。対応信号機の近くで受信を待ちます。複数の交差点を受信した場合は一覧から選択できます。</li>
+      </ol>
+      <p>受信方式は3つあります。「周囲をまとめて監視（Bluefy）」は Bluefy 独自の <code>navigator.bluetooth.watchAdvertisements()</code> を使い、メーカーID <code>0x01CE</code> のデータを解析します。「周囲をまとめてスキャン」は Chrome の実験的機能 <code>requestLEScan()</code> 用、「デバイスを選んで広告を監視」は <code>requestDevice()</code> + <code>device.watchAdvertisements()</code> 用で、いずれも GATT 接続は行いません。通常は対象外メーカーのデータを破棄しますが、デバッグモードでは受信確認のため表示します。</p>
+      <p>PICS信号機が近くにない場合は「デバッグモード」をオンにして「監視開始」を押してください。受信イベント数が増えればBLEアドバタイズを受信できています。0件のままでもスキャン失敗とは限りません。周囲にアドバタイズを送信するBLE機器があるか、権限やBluetooth設定を確認してください。</p>
+      <p>ページを非表示にすると受信を停止します。再開するときは「監視開始」を押してください。5秒以上信号データが届かない場合は「更新なし」と表示します。監視中は Bluefy の画面スリープ防止APIが使える場合に画面を暗くしません。</p>
+      <p>データはこのページ内だけで処理し、サーバーには送信しません。再読み込みや実機・デモの切り替えで受信データは消去されます。</p>
+      <p><a href="https://github.com/yumu19/ble-pics-viewer" target="_blank" rel="noreferrer">原典リポジトリ（MIT License）</a> · <a href="https://github.com/whatwg/bluetooth/blob/main/implementation-status.md" target="_blank" rel="noreferrer">Web Bluetooth実装状況</a></p>
+    </details>
+    <p class="safety-note">観測・開発用のモニターです。横断時は現地の信号と周囲の状況を確認してください。</p>
+  </main>
+  <footer><span>PICS Viewer · Bluefy Edition</span><span>Ported from yumu19/ble-pics-viewer (MIT)</span></footer>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+ * PICS parser — ported verbatim from pics.mjs of
+ * yumu19/ble-pics-viewer (MIT License).
+ * Manufacturer-specific payload only: the company identifier
+ * (CE 01) is not included.
+ * ============================================================ */
+const MANUFACTURER_ID = 0x01ce;
+const HISTORY_WINDOW_MS = 30_000;
+const STALE_AFTER_MS = 5_000;
+
+const SIGNAL_STATES = ['NoSignal', 'Red', 'BlinkGreen', 'Green', 'None'];
+const SIGNAL_LABELS = {
+  NoSignal: '信号なし', Red: '赤', BlinkGreen: '青点滅', Green: '青',
+  None: '対象なし', Unknown: '不明',
+};
+
+function toBytes(data) {
+  if (ArrayBuffer.isView(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  }
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (Array.isArray(data)) return Uint8Array.from(data);
+  throw new TypeError('パケットにはArrayBufferまたはTypedArrayを指定してください。');
+}
+
+function hexDump(data) {
+  return Array.from(toBytes(data), byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+}
+
+// Byte offsets and signal encodings follow process_pics() in ble-pics-viewer.py.
+function processPics(data) {
+  const bytes = toBytes(data);
+  if (bytes.length < 10) throw new RangeError('PICSヘッダーが短すぎます（10バイト以上必要）。');
+  const type = bytes[2];
+  const minimumLength = { 0: 24, 1: 18, 2: 11 }[type] ?? 10;
+  if (bytes.length < minimumLength) {
+    throw new RangeError(`Type ${type}のパケットが短すぎます（${minimumLength}バイト以上必要）。`);
+  }
+  const info = {
+    message_type: type,
+    message_id: bytes[3],
+    intersection_id: hexDump(bytes.subarray(6, 10)).replaceAll(' ', ''),
+  };
+  if (type === 0) {
+    info.identifier = new TextDecoder().decode(bytes.subarray(10, 24))
+      .replaceAll('\uFFFD', '').replace(/^\0+|\0+$/g, '');
+  } else if (type === 1) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    info.latitude = view.getInt32(10, false) / 1_000_000;
+    info.longitude = view.getInt32(14, false) / 1_000_000;
+  } else if (type === 2) {
+    info.pedestrian_signals = Array.from(bytes.subarray(10, 16), byte => ({
+      remaining_time: (byte >> 4) >= 8 ? -1 : (byte >> 4) + 1,
+      signal_state: SIGNAL_STATES[byte & 0x0f] ?? 'Unknown',
+    }));
+  }
+  return info;
+}
+
+function recentHistory(history, now = Date.now()) {
+  return history.filter(entry => now - entry.timestamp <= HISTORY_WINDOW_MS).slice(-5);
+}
+
+function updateIntersection(previous, info, raw, timestamp, metadata = {}) {
+  const entry = {
+    ...previous,
+    ...info,
+    ...metadata,
+    timestamp,
+    raw: Uint8Array.from(toBytes(raw)),
+    latest: info,
+    history: recentHistory(previous?.history ?? [], timestamp),
+    count: (previous?.count ?? 0) + 1,
+  };
+  if (info.message_type === 2) {
+    entry.signalTimestamp = timestamp;
+    entry.history = recentHistory([...entry.history, {
+      timestamp, signals: info.pedestrian_signals,
+    }], timestamp);
+  }
+  return entry;
+}
+
+// Synthetic advertisements, decoded through exactly the same path as received data.
+function demoPackets(step) {
+  const header = (type, length) => {
+    const data = new Uint8Array(length);
+    data[2] = type;
+    data[3] = step % 256;
+    data.set([0x00, 0x00, 0x00, 0x01], 6);
+    return data;
+  };
+  const name = header(0, 24);
+  name.set(new TextEncoder().encode('DEMO CROSSING'), 10);
+  const position = header(1, 18);
+  const view = new DataView(position.buffer);
+  view.setInt32(10, 35_681_236, false);
+  view.setInt32(14, 139_767_125, false);
+  const signals = header(2, 16);
+  const phase = step % 24;
+  const eastWest = phase < 8 ? 3 : phase < 12 ? 2 : 1;
+  const northSouth = phase < 12 ? 1 : phase < 20 ? 3 : 2;
+  const remaining = (7 - (step % 8)) << 4;
+  signals.set([remaining | eastWest, remaining | northSouth, 0x84, 0x84, 0x84, 0x84], 10);
+  return step === 0 ? [name, position, signals] : [signals];
+}
+
+/* ============================================================
+ * Manufacturer data extraction.
+ * The spec exposes event.manufacturerData as a Map keyed by
+ * company identifier, but implementations (incl. Bluefy) differ,
+ * so probe Map-like / object-like shapes defensively.
+ * ============================================================ */
+function manufacturerKeys(md) {
+  const keys = [];
+  if (!md) return keys;
+  if (typeof md.forEach === 'function') {
+    md.forEach((_, key) => keys.push(Number(key)));
+    return keys.filter(Number.isFinite);
+  }
+  if (typeof md.keys === 'function') {
+    for (const key of md.keys()) keys.push(Number(key));
+    return keys.filter(Number.isFinite);
+  }
+  return Object.keys(md).map(k => {
+    const n = Number(k);
+    return Number.isFinite(n) ? n : parseInt(k, 16);
+  }).filter(Number.isFinite);
+}
+
+function getManufacturerData(event, id) {
+  const md = event?.manufacturerData;
+  if (!md) return null;
+  let value = null;
+  if (typeof md.get === 'function') {
+    try { value = md.get(id); } catch (_) { /* ignore */ }
+  }
+  if (value == null && typeof md.forEach === 'function') {
+    md.forEach((v, key) => { if (Number(key) === id) value = v; });
+  }
+  if (value == null && md[id] != null) value = md[id];
+  if (value == null) {
+    const hexKey = '0x' + id.toString(16).padStart(4, '0');
+    if (md[hexKey] != null) value = md[hexKey];
+  }
+  if (value == null) return null;
+  // Some implementations hand back plain arrays or byte strings.
+  if (Array.isArray(value)) return Uint8Array.from(value);
+  return value;
+}
+
+/* ============================================================
+ * Receivers. Three modes:
+ *  - bluefy: navigator.bluetooth.watchAdvertisements() (Bluefy
+ *    extension, Bluefy 3.8.2+). Events fire on navigator.bluetooth.
+ *  - scan:   navigator.bluetooth.requestLEScan() (Chrome flag).
+ *  - watch:  requestDevice() + device.watchAdvertisements().
+ * ============================================================ */
+function scanErrorMessage(error) {
+  const messages = {
+    NotAllowedError: 'スキャンが許可されませんでした。ブラウザとOSのBluetooth権限を確認して、再度開始してください。',
+    NotFoundError: 'スキャン要求がキャンセルされたか、Bluetoothアダプターが見つかりません。',
+    NotSupportedError: 'このブラウザ・OSではアドバタイズのスキャンを利用できません。動作環境・使い方を確認してください。',
+    SecurityError: 'スキャンがセキュリティ設定で制限されています。HTTPSで直接ページを開き、サイトのBluetooth権限を確認してください。',
+    InvalidStateError: 'スキャンを開始できない状態です。Bluetoothの電源、OSのブラウザへのBluetooth権限、ページが表示中かを確認してください。',
+    AbortError: 'スキャンが中断されました。再度開始してください。',
+  };
+  const details = [error?.name, error?.message].filter(Boolean).join(': ') || String(error);
+  return `${messages[error?.name] ?? 'スキャンを開始できませんでした。'}\nブラウザ詳細: ${details}`;
+}
+
+function setScreenDim(enabled) {
+  // Bluefy extension: keep the screen awake while monitoring.
+  try { navigator.bluetooth?.setScreenDimEnabled?.(enabled); } catch (_) { /* ignore */ }
+}
+
+class BaseReceiver {
+  constructor(bluetooth, { onAdvertisement, onState }) {
+    this.bluetooth = bluetooth;
+    this.eventTarget = bluetooth;
+    this.onAdvertisement = onAdvertisement;
+    this.onState = onState;
+    this.mode = 'idle';
+    this.scan = null;
+    this.generation = 0;
+    this.listening = false;
+    this.listener = event => {
+      if (this.mode === 'requesting' || this.mode === 'scanning') this.onAdvertisement(event);
+    };
+  }
+  setMode(mode) { this.mode = mode; this.onState(mode); }
+  stop() {
+    ++this.generation;
+    try { this.scan?.stop(); } catch (_) { /* ignore */ }
+    this.scan = null;
+    if (this.listening) {
+      this.eventTarget.removeEventListener('advertisementreceived', this.listener);
+      this.listening = false;
+    }
+    setScreenDim(false);
+    this.setMode('idle');
+  }
+}
+
+class BluefyWatchReceiver extends BaseReceiver {
+  async start() {
+    if (this.mode !== 'idle') return false;
+    const generation = ++this.generation;
+    this.setMode('requesting');
+    try {
+      this.eventTarget = this.bluetooth;
+      this.bluetooth.addEventListener('advertisementreceived', this.listener);
+      this.listening = true;
+      const controller = ('AbortController' in window) ? new AbortController() : null;
+      this.abortController = controller;
+      let started = false;
+      if (controller) {
+        try {
+          await this.bluetooth.watchAdvertisements({ signal: controller.signal });
+          started = true;
+        } catch (error) {
+          if (error?.name === 'AbortError' || generation !== this.generation) throw error;
+          // Fall through and retry without arguments: Bluefy builds differ.
+        }
+      }
+      if (!started) {
+        await this.bluetooth.watchAdvertisements();
+      }
+      if (generation !== this.generation) { this.stop(); return false; }
+      this.scan = {
+        active: true,
+        stop: () => {
+          this.scan.active = false;
+          try { controller?.abort(); } catch (_) { /* ignore */ }
+          try { this.bluetooth.unwatchAdvertisements?.(); } catch (_) { /* ignore */ }
+        },
+      };
+      setScreenDim(true);
+      this.setMode('scanning');
+      return true;
+    } catch (error) {
+      if (generation !== this.generation) return false;
+      this.stop();
+      throw error;
+    }
+  }
+}
+
+class LEScanReceiver extends BaseReceiver {
+  async start() {
+    if (this.mode !== 'idle') return false;
+    const generation = ++this.generation;
+    this.setMode('requesting');
+    try {
+      this.eventTarget = this.bluetooth;
+      this.bluetooth.addEventListener('advertisementreceived', this.listener);
+      this.listening = true;
+      const scan = await this.bluetooth.requestLEScan({
+        acceptAllAdvertisements: true,
+        keepRepeatedDevices: true,
+      });
+      if (generation !== this.generation) { scan.stop(); return false; }
+      this.scan = scan;
+      setScreenDim(true);
+      this.setMode('scanning');
+      return true;
+    } catch (error) {
+      if (generation !== this.generation) return false;
+      this.stop();
+      throw error;
+    }
+  }
+}
+
+class DeviceWatchReceiver extends BaseReceiver {
+  async start({ picsOnly = true } = {}) {
+    if (this.mode !== 'idle') return false;
+    const generation = ++this.generation;
+    this.setMode('requesting');
+    try {
+      const options = { optionalManufacturerData: [MANUFACTURER_ID] };
+      if (picsOnly) {
+        options.filters = [{ manufacturerData: [{ companyIdentifier: MANUFACTURER_ID }] }];
+      } else {
+        options.acceptAllDevices = true;
+      }
+      const device = await this.bluetooth.requestDevice(options);
+      if (generation !== this.generation) return false;
+      if (typeof device.watchAdvertisements !== 'function') {
+        throw new DOMException('watchAdvertisements() is not available on this device/browser.', 'NotSupportedError');
+      }
+      const controller = new AbortController();
+      this.abortController = controller;
+      this.device = device;
+      this.eventTarget = device;
+      device.addEventListener('advertisementreceived', this.listener);
+      this.listening = true;
+      await device.watchAdvertisements({ signal: controller.signal });
+      if (generation !== this.generation) { controller.abort(); return false; }
+      this.scan = {
+        get active() { return !controller.signal.aborted && device.watchingAdvertisements; },
+        stop() { controller.abort(); },
+      };
+      setScreenDim(true);
+      this.setMode('scanning');
+      return true;
+    } catch (error) {
+      if (generation !== this.generation) return false;
+      this.stop();
+      throw error;
+    }
+  }
+  stop() {
+    try { this.abortController?.abort(); } catch (_) { /* ignore */ }
+    this.abortController = null;
+    this.device = null;
+    super.stop();
+  }
+}
+
+/* ============================================================
+ * Diagnostics (debug mode) — simplified equivalent of debug.mjs.
+ * ============================================================ */
+class AdvertisementDiagnostics {
+  constructor() { this.clear(); }
+  clear() {
+    this.count = 0;
+    this.picsCount = 0;
+    this.lastTimestamp = null;
+    this.devices = new Map();
+    this.events = [];
+  }
+  record(event) {
+    const now = Date.now();
+    this.count++;
+    this.lastTimestamp = now;
+    const ids = manufacturerKeys(event.manufacturerData);
+    if (ids.includes(MANUFACTURER_ID)) this.picsCount++;
+    const deviceId = event.device?.id ?? event.deviceId ?? '';
+    const name = event.name || event.device?.name || '名称なし';
+    if (deviceId || name) {
+      const key = deviceId || name;
+      const previous = this.devices.get(key);
+      if (!previous && this.devices.size >= 100) {
+        this.devices.delete(this.devices.keys().next().value);
+      }
+      this.devices.set(key, {
+        timestamp: now, name, deviceId,
+        rssi: Number.isFinite(event.rssi) ? event.rssi : null,
+        manufacturerIds: ids,
+        count: (previous?.count ?? 0) + 1,
+      });
+    }
+    const summary = { timestamp: now, name, deviceId, rssi: Number.isFinite(event.rssi) ? event.rssi : null, manufacturerIds: ids };
+    const pics = getManufacturerData(event, MANUFACTURER_ID);
+    if (pics) { try { summary.picsData = hexDump(pics); } catch (_) { /* ignore */ } }
+    this.events.push(summary);
+    if (this.events.length > 20) this.events.shift();
+  }
+}
+
+/* ============================================================
+ * UI — adapted from app.mjs of the original.
+ * ============================================================ */
+const $ = id => document.getElementById(id);
+const intersections = new Map();
+const diagnostics = new AdvertisementDiagnostics();
+const timeFormat = new Intl.DateTimeFormat('ja-JP', {
+  hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3,
+  hourCycle: 'h23',
+});
+const bt = navigator.bluetooth;
+const bluefySupported = window.isSecureContext && typeof bt?.watchAdvertisements === 'function';
+const scanSupported = window.isSecureContext && typeof bt?.requestLEScan === 'function';
+const watchSupported = window.isSecureContext && typeof bt?.requestDevice === 'function'
+  && (typeof window.BluetoothDevice !== 'undefined'
+    ? typeof window.BluetoothDevice.prototype.watchAdvertisements === 'function'
+    : true); // Bluefy may not expose the BluetoothDevice global; enable and let start() verify.
+const requestedMethod = new URLSearchParams(window.location.search).get('mode');
+if (['bluefy', 'scan', 'watch'].includes(requestedMethod)) {
+  $('reception-method').value = requestedMethod;
+} else if (!bluefySupported && scanSupported) {
+  $('reception-method').value = 'scan';
+} else if (!bluefySupported && !scanSupported) {
+  $('reception-method').value = 'watch';
+}
+const method = () => $('reception-method').value;
+const watchingDevice = () => method() === 'watch';
+const picsOnly = () => $('watch-target').value === 'pics';
+const supported = () => method() === 'bluefy' ? bluefySupported : method() === 'scan' ? scanSupported : watchSupported;
+let mode = 'idle';
+let selectedId = '';
+let packetCount = 0;
+let invalidCount = 0;
+let demoTimer = null;
+let demoStep = 0;
+let demoData = false;
+
+const signalCards = Array.from({ length: 6 }, (_, index) => {
+  const card = document.createElement('article');
+  card.className = 'signal';
+  card.innerHTML = `<h3 class="signal-heading">信号${index + 1}${index < 2 ? [' · 東西', ' · 南北'][index] : ''}</h3><div class="signal-body"><span class="lamp" aria-hidden="true"></span><div><span class="signal-state">未受信</span><p class="remaining">残り値 —</p></div></div>`;
+  $('signals').append(card);
+  return {
+    card,
+    state: card.querySelector('.signal-state'),
+    remaining: card.querySelector('.remaining'),
+  };
+});
+
+function updateCompatibility() {
+  const api = method() === 'bluefy' ? 'Bluefy watchAdvertisements'
+    : method() === 'scan' ? 'requestLEScan' : 'requestDevice / watchAdvertisements';
+  $('watch-notice').hidden = !watchingDevice();
+  $('watch-target-control').hidden = !watchingDevice();
+  $('watch-notice').textContent = picsOnly()
+    ? '選択一覧をメーカーID 0x01CEのPICS候補に絞ります。名称が不明でも候補として選択できます。選択後に交差点ID・信号情報が表示されることを確認してください。同じメーカーIDの別機器も候補になる場合があります。監視するのは選んだ1台だけで、GATT接続は行いません。'
+    : '選択した1台だけを監視します。GATT接続は行いません。デバッグでは名前やRSSIで受信確認でき、メーカー生データは許可を要求したPICSの0x01CEのみ表示できます。デバイス一覧の表示だけでは、広告の受信確認にはなりません。';
+  if (!window.isSecureContext) {
+    $('compatibility').textContent = '実機受信にはHTTPSで開く必要があります（BluefyでHTTPSのURLを開いてください）。現在の環境ではデモを利用できます。';
+  } else if (!bt) {
+    $('compatibility').textContent = 'このブラウザではWeb Bluetoothを利用できません。iPhoneではBluefyで開いてください。デモは利用できます。';
+  } else if (!supported()) {
+    $('compatibility').textContent = `この環境では選択した受信方式（${api}）を利用できません。Bluefyの場合はアプリ設定でwatchAdvertisementsを有効にしてください。デモは利用できます。`;
+  } else {
+    $('compatibility').textContent = `${api}を検出しました。実際の受信可否はOS・Bluetooth・権限に依存します。開始操作後にブラウザの許可・選択画面で操作してください。`;
+  }
+}
+updateCompatibility();
+
+function setMode(next) {
+  mode = next;
+  $('mode').dataset.mode = mode;
+  $('mode').textContent = { idle: '停止中', requesting: '許可待ち', scanning: watchingDevice() ? '広告監視中' : '監視中', demo: 'デモ' }[mode];
+  $('start').textContent = watchingDevice() ? 'デバイスを選んで監視' : '監視開始';
+  $('start').disabled = !supported() || mode === 'scanning' || mode === 'requesting';
+  $('reception-method').disabled = mode !== 'idle';
+  $('watch-target').disabled = mode !== 'idle';
+  $('demo').disabled = mode === 'demo' || mode === 'requesting';
+  $('stop').disabled = mode === 'idle';
+  $('status').textContent = {
+    idle: '停止中です。表示は最後に受信したデータです。',
+    requesting: watchingDevice() ? `${picsOnly() ? 'PICS候補（メーカーID 0x01CE）' : 'すべてのデバイス'}からの選択・広告監視の開始を待っています…` : 'ブラウザの受信許可を待っています…',
+    scanning: watchingDevice() ? `選択したデバイス「${receiver().device?.name || '名称なし'}」の広告を監視中です。GATT接続は行いません。` : 'BLEアドバタイズ監視中です。受信したメーカーID 0x01CE のデータを解析します。',
+    demo: '架空の交差点データを1秒ごとに更新しています。',
+  }[mode];
+  render();
+}
+
+const receiverCallbacks = {
+  onState: setMode,
+  onAdvertisement(event) {
+    if ($('debug-enabled').checked) diagnostics.record(event);
+    const data = getManufacturerData(event, MANUFACTURER_ID);
+    if (!data) return;
+    receive(data, {
+      deviceName: event.name || event.device?.name || '',
+      rssi: Number.isFinite(event.rssi) ? event.rssi : null,
+    });
+  },
+};
+const receivers = {
+  bluefy: new BluefyWatchReceiver(bt ?? {}, receiverCallbacks),
+  scan: new LEScanReceiver(bt ?? {}, receiverCallbacks),
+  watch: new DeviceWatchReceiver(bt ?? {}, receiverCallbacks),
+};
+const receiver = () => receivers[method()];
+
+function resetData(isDemo = false) {
+  demoData = isDemo;
+  intersections.clear();
+  selectedId = '';
+  packetCount = 0;
+  invalidCount = 0;
+  diagnostics.clear();
+  $('error').hidden = true;
+  updateOptions();
+  render();
+}
+
+function receive(raw, metadata) {
+  try {
+    const info = processPics(raw);
+    const id = info.intersection_id;
+    if (!intersections.has(id) && intersections.size >= 100) {
+      const oldest = intersections.keys().next().value;
+      intersections.delete(oldest);
+      if (selectedId === oldest) selectedId = '';
+    }
+    const previous = intersections.get(id);
+    const entry = updateIntersection(previous, info, raw, Date.now(), metadata);
+    intersections.set(id, entry);
+    packetCount++;
+    if (!selectedId) selectedId = id;
+    if (!previous || previous.identifier !== entry.identifier) updateOptions();
+    render();
+  } catch (error) {
+    invalidCount++;
+    $('invalid-count').textContent = `不正パケット: ${invalidCount}（最新: ${error.message}）`;
+  }
+}
+
+function updateOptions() {
+  const options = Array.from(intersections, ([id, entry]) => {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = entry.identifier ? `${entry.identifier} / ${id}` : id;
+    return option;
+  });
+  if (!options.length) {
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '受信待ち';
+    options.push(placeholder);
+  }
+  $('intersection').replaceChildren(...options);
+  $('intersection').value = selectedId;
+  $('intersection').disabled = intersections.size === 0;
+}
+
+function formatRemaining(signal) {
+  return !signal || signal.remaining_time < 0 ? '—' : String(signal.remaining_time);
+}
+
+function render() {
+  $('demo-notice').hidden = !demoData;
+  const entry = intersections.get(selectedId);
+  const now = Date.now();
+  const running = mode === 'scanning' || mode === 'demo';
+  const hasSignals = entry?.signalTimestamp != null;
+  const stale = hasSignals && (!running || now - entry.signalTimestamp >= STALE_AFTER_MS);
+  $('signals').classList.toggle('is-stale', Boolean(stale));
+  $('freshness').classList.toggle('stale', Boolean(stale));
+  $('freshness').textContent = hasSignals
+    ? `${stale ? (running ? '更新なし' : '停止中 · 最終受信値') : '信号データ受信中'} · 最終信号受信 ${timeFormat.format(entry.signalTimestamp)} · ${Math.max(0, Math.floor((now - entry.signalTimestamp) / 1000))}秒前`
+    : 'Type 2（信号状態）の受信待ち';
+
+  for (const [index, { card, state, remaining }] of signalCards.entries()) {
+    const signal = entry?.pedestrian_signals?.[index];
+    card.dataset.state = signal?.signal_state ?? '';
+    state.textContent = signal ? SIGNAL_LABELS[signal.signal_state] : '未受信';
+    remaining.textContent = `残り値 ${formatRemaining(signal)}`;
+  }
+  $('intersection-name').textContent = entry
+    ? (entry.identifier || entry.deviceName || `交差点 ${selectedId}`)
+    : '交差点の情報を待っています';
+  $('coordinates').textContent = entry?.latitude != null && entry?.longitude != null
+    ? `${entry.latitude.toFixed(6)}, ${entry.longitude.toFixed(6)}` : '位置情報 未受信';
+  $('received-at').textContent = entry ? timeFormat.format(entry.timestamp) : '—';
+  $('message-type').textContent = entry ? `Type ${entry.latest.message_type} / ID ${entry.latest.message_id}` : '—';
+  $('rssi').textContent = entry?.rssi != null ? `${entry.rssi} dBm` : '—';
+  $('packet-count').textContent = String(packetCount);
+  $('raw').textContent = entry ? hexDump(entry.raw) : 'パケット未受信';
+  $('parsed').textContent = entry ? JSON.stringify(entry.latest, null, 2) : '{}';
+  if (!invalidCount) $('invalid-count').textContent = '不正パケット: 0';
+  renderHistory(entry, now);
+  renderDebug(now);
+}
+
+function renderDebug(now = Date.now()) {
+  const enabled = $('debug-enabled').checked;
+  $('debug-panel').hidden = !enabled;
+  if (!enabled) return;
+  const { count, picsCount, lastTimestamp, devices, events } = diagnostics;
+  $('debug-count').textContent = String(count);
+  $('debug-devices').textContent = String(devices.size);
+  $('debug-pics-count').textContent = String(picsCount);
+  const age = lastTimestamp == null ? null : Math.max(0, Math.floor((now - lastTimestamp) / 1000));
+  $('debug-last').textContent = lastTimestamp == null ? '—' : `${timeFormat.format(lastTimestamp)} · ${age}秒前`;
+  let status;
+  if (mode === 'demo') {
+    status = 'デモ表示中です。Bluetoothのスキャンは実行していません。実機の受信確認には「監視開始」を押してください。';
+  } else if (!supported()) {
+    status = '選択した受信方式のAPIを利用できません。上の動作環境の案内を確認してください。';
+  } else if (mode === 'requesting') {
+    status = watchingDevice() ? 'デバイス選択・広告監視の開始待ちです。実際の広告はまだ受信していません。' : '受信許可待ちです。開始はまだ確認できていません。';
+  } else if (mode === 'scanning' && count === 0) {
+    status = '監視開始済み · 受信待ちです。実際のBLE受信はまだ確認できていません。周囲のBLE機器のアドバタイズ送信、OSとブラウザの権限を確認してください。';
+  } else if (mode === 'scanning') {
+    status = age < 5
+      ? 'BLEアドバタイズの受信を確認できました。PICS信号機がなくても受信できています。'
+      : `このセッションでBLE受信を確認済みです。直近${age}秒は受信がありません。`;
+  } else {
+    status = count
+      ? '停止中 · 以下は実際に受信したログです。現在は監視していません。'
+      : '停止中 · 「監視開始」を押して周囲のBLEアドバタイズを確認してください。';
+  }
+  $('debug-status').textContent = status;
+  const rows = Array.from(devices.values()).reverse().map(device => {
+    const row = document.createElement('tr');
+    const values = [
+      timeFormat.format(device.timestamp), device.name,
+      device.rssi == null ? '—' : `${device.rssi} dBm`,
+      device.manufacturerIds.map(id => '0x' + id.toString(16).toUpperCase().padStart(4, '0')).join(', ') || 'なし',
+      String(device.count),
+    ];
+    values.forEach((value, index) => {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      if (index === 1 && device.deviceId) {
+        const id = document.createElement('small');
+        id.textContent = device.deviceId;
+        cell.append(id);
+      }
+      row.append(cell);
+    });
+    return row;
+  });
+  if (!rows.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 5;
+    cell.className = 'empty';
+    cell.textContent = count ? 'デバイスIDを含むイベントは未受信です。詳細ログを確認してください。' : 'BLEアドバタイズ未受信';
+    row.append(cell);
+    rows.push(row);
+  }
+  $('debug-device-list').replaceChildren(...rows);
+  $('debug-log').textContent = events.length
+    ? JSON.stringify(events.slice().reverse().map(event => ({ ...event, receivedAt: timeFormat.format(event.timestamp) })), null, 2)
+    : 'アドバタイズ未受信';
+}
+
+function renderHistory(entry, now) {
+  const entries = recentHistory(entry?.history ?? [], now).reverse();
+  const rows = entries.map(item => {
+    const row = document.createElement('tr');
+    const values = [timeFormat.format(item.timestamp), ...item.signals.slice(0, 2).map(signal => SIGNAL_LABELS[signal.signal_state])];
+    while (values.length < 3) values.push('未受信');
+    values.push(`${formatRemaining(item.signals[0])} / ${formatRemaining(item.signals[1])}`);
+    values.forEach((value, index) => {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      if (index === 1 || index === 2) {
+        cell.className = 'state-label';
+        cell.dataset.state = item.signals[index - 1]?.signal_state ?? '';
+      }
+      row.append(cell);
+    });
+    return row;
+  });
+  if (!rows.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 4;
+    cell.className = 'empty';
+    cell.textContent = '直近30秒の信号受信履歴はありません';
+    row.append(cell);
+    rows.push(row);
+  }
+  $('history').replaceChildren(...rows);
+}
+
+function stopReception(message) {
+  clearInterval(demoTimer);
+  demoTimer = null;
+  for (const r of Object.values(receivers)) { try { r.stop(); } catch (_) { /* ignore */ } }
+  if (message) $('status').textContent = message;
+}
+
+$('start').addEventListener('click', async () => {
+  if (!supported() || mode === 'requesting' || mode === 'scanning') return;
+  stopReception();
+  resetData();
+  try {
+    // Called directly in this click handler to preserve transient user activation.
+    await receiver().start({ picsOnly: picsOnly() });
+  } catch (error) {
+    $('error').textContent = scanErrorMessage(error);
+    $('error').hidden = false;
+  }
+});
+
+$('demo').addEventListener('click', () => {
+  stopReception();
+  resetData(true);
+  demoStep = 0;
+  setMode('demo');
+  const tick = () => {
+    for (const packet of demoPackets(demoStep++)) receive(packet, { deviceName: 'デモ交差点', rssi: null });
+  };
+  tick();
+  demoTimer = setInterval(tick, 1000);
+});
+$('stop').addEventListener('click', () => stopReception());
+function receptionSettingsChanged() {
+  resetData(demoData);
+  updateCompatibility();
+  setMode(mode);
+}
+$('reception-method').addEventListener('change', receptionSettingsChanged);
+$('watch-target').addEventListener('change', receptionSettingsChanged);
+$('debug-enabled').addEventListener('change', () => {
+  diagnostics.clear();
+  $('debug-device-list').replaceChildren();
+  $('debug-log').textContent = 'アドバタイズ未受信';
+  renderDebug();
+});
+$('debug-clear').addEventListener('click', () => {
+  diagnostics.clear();
+  renderDebug();
+});
+$('intersection').addEventListener('change', event => {
+  selectedId = event.target.value;
+  render();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && mode !== 'idle') stopReception('ページが非表示になったため停止しました。再開するには監視開始、またはデモを押してください。');
+});
+window.addEventListener('pagehide', () => stopReception());
+setInterval(() => {
+  if (mode === 'scanning' && receiver().scan && receiver().scan.active === false) {
+    stopReception('ブラウザが受信を停止しました。再開するには開始ボタンを押してください。');
+  }
+  render();
+}, 1000);
+setMode('idle');
+$('status').textContent = '監視開始、またはデモを選んでください。';
+</script>
+</body>
+</html>
